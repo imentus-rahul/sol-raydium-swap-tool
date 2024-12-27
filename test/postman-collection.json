@@ -1,0 +1,621 @@
+{
+    "info": {
+        "_postman_id": "12345678-1234-1234-1234-123456789012",
+        "name": "Solana API Collection",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Get Raw Account Info",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getRawAccountInfo/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getRawAccountInfo",
+                        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Get Block Height",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getBlockHeight",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getBlockHeight"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Get Latest Blockhash",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getLatestBlockhash",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getLatestBlockhash"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Get Recent Priority Fee",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getRecentPriorityFee",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getRecentPriorityFee"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"accountKeys\": [\"AccountKey1\", \"AccountKey2\"]}"
+                }
+            }
+        },
+        {
+            "name": "Get Compute Budget Ixs",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getComputeBudgetIxs",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getComputeBudgetIxs"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"computeUnitPrice\": 0.00001, \"computeUnitLimit\": 1000000}"
+                }
+            }
+        },
+        {
+            "name": "Get Parsed Transaction Receipt",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getParsedTransactionReceipt/2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getParsedTransactionReceipt",
+                        "2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Get Both Transaction Receipt",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getBothTransactionReceipt/2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getBothTransactionReceipt",
+                        "2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Sign Transaction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/signTx",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "signTx"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"transaction\": \"YourTransactionDataHere\", \"arrayOfStringKeypairs\": [\"Keypair1\", \"Keypair2\"]}"
+                }
+            }
+        },
+        {
+            "name": "Send Signed Transaction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/sendSignedTx",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "sendSignedTx"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"transaction\": \"YourSignedTransactionDataHere\"}"
+                }
+            }
+        },
+        {
+            "name": "Sign and Send Transaction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/signAndSendTx",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "signAndSendTx"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"transaction\": \"YourTransactionDataHere\", \"arrayOfStringKeypairs\": [\"Keypair1\", \"Keypair2\"]}"
+                }
+            }
+        },
+        {
+            "name": "Confirm Transaction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/confirmTransaction/2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "confirmTransaction",
+                        "2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Get SOL Balance",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getSOLBalance/YourAccountToFetchHere",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getSOLBalance",
+                        "YourAccountToFetchHere"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Transfer SOL",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/tx_transferSOL",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "tx_transferSOL"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"fromAddress\": \"BqVJWsGB5ibBPnaDiCA33HMsb3ZwrCGws9awywa2n1sL\", \"recipientAddress\": \"BqVJWsGB5ibBPnaDiCA33HMsb3ZwrCGws9awywa2n1sL\", \"amount\": 1.5}"
+                }
+            }
+        },
+        {
+            "name": "Get Pre and Post Solana Balance",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getPreAndPostSolanaBalance",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getPreAndPostSolanaBalance"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"transactionHash\": \"2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE\", \"owner\": \"OwnerAddressHere\"}"
+                }
+            }
+        },
+        {
+            "name": "Get Token Account",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getTokenAccount",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getTokenAccount"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"mintAddress\": \"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\", \"owner\": \"OwnerAddressHere\"}"
+                }
+            }
+        },
+        {
+            "name": "Create Token Account",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/ix_createTokenAccount",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "ix_createTokenAccount"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"mintAddress\": \"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\", \"owner\": \"OwnerAddressHere\"}"
+                }
+            }
+        },
+        {
+            "name": "Transfer Token",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/ix_transferToken",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "ix_transferToken"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"mintAddress\": \"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\", \"owner\": \"OwnerAddressHere\", \"recipientAddress\": \"BqVJWsGB5ibBPnaDiCA33HMsb3ZwrCGws9awywa2n1sL\", \"amount\": 10}"
+                }
+            }
+        },
+        {
+            "name": "Sync Native Token",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/ix_syncNativeToken",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "ix_syncNativeToken"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"recipientAddress\": \"BqVJWsGB5ibBPnaDiCA33HMsb3ZwrCGws9awywa2n1sL\"}"
+                }
+            }
+        },
+        {
+            "name": "Unwrap SOL Close Token Account",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/ix_unwrapSolCloseTokenAccount",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "ix_unwrapSolCloseTokenAccount"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"recipientAddress\": \"BqVJWsGB5ibBPnaDiCA33HMsb3ZwrCGws9awywa2n1sL\"}"
+                }
+            }
+        },
+        {
+            "name": "Get All Token Accounts",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getAllTokenAccounts",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getAllTokenAccounts"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"owner\": \"OwnerAddressHere\"}"
+                }
+            }
+        },
+        {
+            "name": "Get Pre and Post Token Balance",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getPreAndPostTokenBalance",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getPreAndPostTokenBalance"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"transactionHash\": \"2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE\", \"owner\": \"OwnerAddressHere\"}"
+                }
+            }
+        },
+        {
+            "name": "Get All Token Accounts with Raydium Prices",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getAllTokenAccountsWithRaydiumPrices",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getAllTokenAccountsWithRaydiumPrices"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"owner\": \"OwnerAddressHere\"}"
+                }
+            }
+        },
+        {
+            "name": "Get Input and Output Token Quantity from Transaction Receipt Post Swap",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getInputAndOutputTokenQtyFromTxReceiptPostSwap",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getInputAndOutputTokenQtyFromTxReceiptPostSwap"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"transactionHash\": \"2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE\", \"owner\": \"OwnerAddressHere\"}"
+                }
+            }
+        },
+        {
+            "name": "Get Pool Keys from AMM ID",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getPoolKeysFromAmmId/3gSjs6MqyHFsp8DXvaKvVUJjV7qg5itf9qmUGuhnSaWH",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getPoolKeysFromAmmId",
+                        "3gSjs6MqyHFsp8DXvaKvVUJjV7qg5itf9qmUGuhnSaWH"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Get Pool Info for Tokens",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getPoolInfoForTokens",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getPoolInfoForTokens"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"ammId\": \"3gSjs6MqyHFsp8DXvaKvVUJjV7qg5itf9qmUGuhnSaWH\", \"mintA\": \"MintAddressAHere\", \"mintB\": \"MintAddressBHere\"}"
+                }
+            }
+        },
+        {
+            "name": "Get Signed Swap Transaction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/getSignedSwapTransaction",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "getSignedSwapTransaction"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"fromToken\": \"FromTokenHere\", \"toToken\": \"ToTokenHere\", \"ammId\": \"3gSjs6MqyHFsp8DXvaKvVUJjV7qg5itf9qmUGuhnSaWH\", \"amount\": 1, \"slippageX\": 0.5, \"maxLamports\": 1000000, \"useVersionedTransaction\": true, \"fixedSide\": \"in\"}"
+                }
+            }
+        },
+        {
+            "name": "Send Signed Swap Transaction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/sendSignedSwapTransaction",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "sendSignedSwapTransaction"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"fromToken\": \"FromTokenHere\", \"toToken\": \"ToTokenHere\", \"ammId\": \"3gSjs6MqyHFsp8DXvaKvVUJjV7qg5itf9qmUGuhnSaWH\", \"amount\": 1, \"slippageX\": 0.5, \"maxLamports\": 1000000, \"useVersionedTransaction\": true, \"fixedSide\": \"in\"}"
+                }
+            }
+        },
+        {
+            "name": "Simulate Signed Swap Transaction",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/simulateSignedSwapTransaction",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "simulateSignedSwapTransaction"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"fromToken\": \"FromTokenHere\", \"toToken\": \"ToTokenHere\", \"ammId\": \"3gSjs6MqyHFsp8DXvaKvVUJjV7qg5itf9qmUGuhnSaWH\", \"amount\": 1, \"slippageX\": 0.5, \"maxLamports\": 1000000, \"useVersionedTransaction\": true, \"fixedSide\": \"in\"}"
+                }
+            }
+        },
+        {
+            "name": "Convert to Wrapped SOL",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3000/solana/convertToWrapSol",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3000",
+                    "path": [
+                        "solana",
+                        "convertToWrapSol"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\"amount\": 1.5}"
+                }
+            }
+        }
+    ]
+}
