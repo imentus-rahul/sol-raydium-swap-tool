@@ -123,6 +123,26 @@
 			"response": []
 		},
 		{
+			"name": "Get Transaction Receipt",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost:3000/solana/getTransactionReceipt/2Y5hzpaSYSiM4U54jmA8yKqTCFCEaaYWAzF5uAHxugaXEo8gJehKXfFFtWyLPZnkgyhn65P39AWbuEtMyZRR9gfk",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"solana",
+						"getTransactionReceipt",
+						"2Y5hzpaSYSiM4U54jmA8yKqTCFCEaaYWAzF5uAHxugaXEo8gJehKXfFFtWyLPZnkgyhn65P39AWbuEtMyZRR9gfk"
+					]
+				}
+			},
+			"response": []
+		},
+		{
 			"name": "Get Both Transaction Receipt",
 			"request": {
 				"method": "GET",
@@ -412,15 +432,27 @@
 		},
 		{
 			"name": "Get All Token Accounts with Raydium Prices",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
 			"request": {
 				"method": "GET",
 				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
 				"url": {
-					"raw": "localhost:3000/solana/getAllTokenAccountsWithRaydiumPrices",
+					"raw": "localhost:8000/solana/getAllTokenAccountsWithRaydiumPrices",
 					"host": [
 						"localhost"
 					],
-					"port": "3000",
+					"port": "8000",
 					"path": [
 						"solana",
 						"getAllTokenAccountsWithRaydiumPrices"

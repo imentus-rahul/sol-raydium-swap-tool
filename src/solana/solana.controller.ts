@@ -31,6 +31,11 @@ export class SolanaController {
     return this.solanaService.ix_getComputeBudgetIxs(body.computeUnitPrice, body.computeUnitLimit);
   }
 
+  @Get('getTransactionReceipt/:transactionHash')
+  async getTransactionReceipt(@Param('transactionHash') transactionHash: string) {
+    return this.solanaService.getTransactionReceipt(transactionHash);
+  }
+
   @Get('getParsedTransactionReceipt/:transactionHash')
   async getParsedTransactionReceipt(@Param('transactionHash') transactionHash: string) {
     return this.solanaService.getParsedTransactionReceipt(transactionHash);

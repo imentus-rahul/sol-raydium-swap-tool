@@ -128,6 +128,20 @@ export class SolanaService {
     //     return fee;
     // }
 
+    async getTransactionReceipt(transactionHash: string) {
+        const connection = await this.getConnectionWithFallback();
+        const transactionReceipt = await connection.getTransaction(transactionHash, { commitment: "finalized", maxSupportedTransactionVersion: 2 });
+
+        let isSuccessful = false;
+        // check if the transaction is successful
+        if (transactionReceipt.meta.err) {
+            isSuccessful = false;
+        } else {
+            isSuccessful = true;
+        }
+        return { transactionReceipt, isSuccessful };
+    }
+
     async getParsedTransactionReceipt(transactionHash: string) {
         const connection = await this.getConnectionWithFallback();
         const transactionReceipt = await connection.getParsedTransaction(transactionHash);
