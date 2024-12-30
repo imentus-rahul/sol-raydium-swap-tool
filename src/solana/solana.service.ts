@@ -2,7 +2,8 @@ import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import axios from 'axios';
 import Decimal from 'decimal.js';
-import { clusterApiUrl, Connection, PublicKey, VersionedMessage, Keypair, Transaction, LAMPORTS_PER_SOL, SystemProgram, TransactionInstruction, ComputeBudgetProgram } from '@solana/web3.js';
+import fs from 'fs';
+import { clusterApiUrl, Connection, PublicKey, VersionedMessage, Keypair, Transaction, LAMPORTS_PER_SOL, SystemProgram, TransactionInstruction, ComputeBudgetProgram, TransactionExpiredBlockheightExceededError, SendTransactionError } from '@solana/web3.js';
 import { LIQUIDITY_STATE_LAYOUT_V4, MARKET_STATE_LAYOUT_V3, MAINNET_PROGRAM_ID, LiquidityPoolKeys } from '@raydium-io/raydium-sdk';
 import { createAssociatedTokenAccountIdempotentInstruction, createCloseAccountInstruction, createSyncNativeInstruction, createTransferInstruction, getAssociatedTokenAddressSync, NATIVE_MINT, TOKEN_PROGRAM_ID, TokenAccountNotFoundError } from '@solana/spl-token';
 
@@ -16,7 +17,11 @@ export class SolanaService {
     private connections: Connection[] = []; // connections pool
     private initialized = false;
     private backendKeypair: Keypair;
-
+    private errorLogFilePaths: string[] = [
+        'logs/error_logs/all_error.log',
+        'logs/error_logs/should_retry_error.log',
+        'logs/error_logs/should_not_retry_error.log'
+    ];
 
     onModuleInit() {
         console.log("SolanaService onModuleInit");
@@ -46,32 +51,114 @@ export class SolanaService {
                 new Uint8Array(process.env.BACKEND_KEYPAIR_SECRET_KEY.split(',').map((e: any) => e * 1)),
             );
 
+            // Reset or create error log files, ensures path already exists, otherwise creates it
+            this.errorLogFilePaths.forEach((filePath) => {
+                console.log("filePath: ", filePath);
+                const logFilePath = filePath;
+                if (!fs.existsSync(logFilePath)) {
+                    // creates directory if it doesn't exist
+                    let dirPath = logFilePath.split('/').slice(0, -1).join('/');
+                    fs.mkdirSync(dirPath, { recursive: true });
+                    fs.writeFileSync(logFilePath, '');
+                }
+                else {
+                    fs.writeFileSync(logFilePath, '');
+                }
+            });
+
             this.initialized = true;
         }
     }
+
+    private logErrorToFile(errorString: string, logFilePathIndex: number = 0) {
+        const logFilePath = this.errorLogFilePaths[logFilePathIndex];
+        const logMessage = `${new Date().toISOString()} - Error: ${errorString}\n`;
+        fs.appendFileSync(logFilePath, logMessage);
+    }
+
+    private delay(ms: number) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Retry mechanism
+    // The error occurred in any function wrapped by this retry function will be caught by the catch block inside the retry function.
+    // The error message will be logged using this.logger.error().
+    // The error will be recorded in the log file using this.logErrorToFile(error).
+    // The method will wait for an exponentially increasing delay before retrying the operation, minimum delay is 0.5 second.
+    private async retry<T>(fn: () => Promise<T>, retries: number = 3, delay: number = 500): Promise<T> {
+        for (let attempt = 0; attempt < retries; attempt++) {
+            try {
+                return await fn();
+            } catch (error) {
+                // Add name of the function to the error message
+                let errorString = `Attempt ${attempt + 1} failed for function name: ${fn.name} with error: ${error.message} | ERROR_NAME: ${error.name} | ERROR_CODE: ${error.code} | ERROR_REASON: ${error.reason}`;
+                this.logger.error(errorString);
+                this.logErrorToFile(errorString, 0);
+
+                if (this.shouldRetry(error)) {
+                    if (attempt < retries - 1) {
+                        errorString = `Retrying... Attempt ${attempt + 1} failed for function name: ${fn.name} with error: ${error.message} | ERROR_NAME: ${error.name} | ERROR_CODE: ${error.code} | ERROR_REASON: ${error.reason}`;
+                        this.logger.error(errorString);
+                        this.logErrorToFile(errorString, 1);
+                        await this.delay(delay);
+                        delay *= 2; // Exponential backoff
+                    } else {
+                        throw new HttpException('Max retries reached for function name: ' + fn.name, HttpStatus.INTERNAL_SERVER_ERROR);
+                    }
+                }
+                else {
+                    errorString = `Should not retry error occurred in retry function. ${errorString}`;
+                    this.logger.error(errorString);
+                    this.logErrorToFile(errorString, 2);
+                    throw error;
+                }
+            }
+        }
+    }
+
+    private shouldRetry(error: any): boolean {
+
+        let errorMessagesToIgnore = ["InstructionError", "Insufficient funds for transaction", "AccountNotFoundError", "Simulation failed"];
+        let errorCodesToIgnore = [12345678];
+
+        // Check for specific error types
+        // .some(): Determines whether the specified callback function returns true for any element of an array
+        // .includes(): Determines whether an array includes a certain element, returning true or false as appropriate
+        if (errorMessagesToIgnore.some(message => error.message.includes(message)) || errorCodesToIgnore.includes(error.code)) {
+            return false; // Do not retry for these errors
+        }
+
+        // Retry for all issues not mentioned here
+        // includes following: 
+        // error instanceof TransactionExpiredBlockheightExceededError
+        // 429, Too Many Requests, socket hang up, Request failed with status code 504, connect ETIMEDOUT, read ECONNRESET, write ECONNABORTED, getaddrinfo ENOTFOUND,
+        return true;
+    }
+
 
     /** 
      * Fallback approach: try each endpoint in order, return the first that works. 
      */
     async getConnectionWithFallback(): Promise<Connection> {
-        for (let i = 0; i < this.connections.length; i++) {
-            const conn = this.connections[i];
-            try {
-                // Quick test to ensure the endpoint is responsive 
-                await conn.getVersion();
-                this.logger.log(`Using working endpoint: ${conn.rpcEndpoint}`);
-                return conn;
-            } catch (err) {
-                this.logger.error(`Endpoint failed: ${conn.rpcEndpoint}`, err);
-                // move on to the next connection
+        return this.retry(async () => {
+            for (let i = 0; i < this.connections.length; i++) {
+                const conn = this.connections[i];
+                try {
+                    // Quick test to ensure the endpoint is responsive 
+                    await conn.getVersion();
+                    this.logger.log(`Using working endpoint: ${conn.rpcEndpoint}`);
+                    return conn;
+                } catch (err) {
+                    this.logger.error(`Endpoint failed: ${conn.rpcEndpoint}`, err);
+                    // move on to the next connection
 
-                // once all endpoints are tried, throw an error
-                if (i === this.connections.length - 1) {
-                    throw new Error('All Solana RPC endpoints failed.');
+                    // once all endpoints are tried, throw an error
+                    if (i === this.connections.length - 1) {
+                        throw new Error('All Solana RPC endpoints failed for creation of a connection object.');
+                    }
                 }
-
             }
-        }
+        });
     }
 
     async getBackendKeypair() {
@@ -79,37 +166,46 @@ export class SolanaService {
     }
 
     async getAccountInfo(publicKey: string) {
-        const connection = await this.getConnectionWithFallback();
-        const accountInfo = await connection.getAccountInfo(new PublicKey(publicKey));
-        return accountInfo;
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
+            const accountInfo = await connection.getAccountInfo(new PublicKey(publicKey));
+            return accountInfo;
+        });
     }
 
     async getBlockHeight() {
-        const connection = await this.getConnectionWithFallback();
-        const blockHeight = await connection.getBlockHeight();
-        return blockHeight;
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
+            const blockHeight = await connection.getBlockHeight();
+            return blockHeight;
+        });
     }
 
     async getLatestBlockhash() {
-        const connection = await this.getConnectionWithFallback();
-        const latestBlockhash = await connection.getLatestBlockhash();
-        return latestBlockhash;
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
+            const latestBlockhash = await connection.getLatestBlockhash();
+            return latestBlockhash;
+        });
     }
 
     async getRecentPriorityFee(accountKeys: string[]) {
-        const connection = await this.getConnectionWithFallback();
-        const priorityFee = await connection.getRecentPrioritizationFees({ lockedWritableAccounts: accountKeys.map(key => new PublicKey(key)) });
-        return priorityFee;
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
+            const priorityFee = await connection.getRecentPrioritizationFees({ lockedWritableAccounts: accountKeys.map(key => new PublicKey(key)) });
+            return priorityFee;
+        });
     }
 
     // ix_getComputeBudgetIxs
     async ix_getComputeBudgetIxs(computeUnitPrice: number, computeUnitLimit: number) {
-
-        const computeBudgetIxs = [
-            ComputeBudgetProgram.setComputeUnitPrice({ microLamports: computeUnitPrice ? computeUnitPrice : 744_452 }),
-            ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnitLimit ? computeUnitLimit : 183_504 })
-        ]
-        return computeBudgetIxs;
+        return this.retry(async () => {
+            const computeBudgetIxs = [
+                ComputeBudgetProgram.setComputeUnitPrice({ microLamports: computeUnitPrice ? computeUnitPrice : 744_452 }),
+                ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnitLimit ? computeUnitLimit : 183_504 })
+            ]
+            return computeBudgetIxs;
+        });
     }
 
     // async getFeeForMessage(message: string) {
@@ -129,283 +225,333 @@ export class SolanaService {
     // }
 
     async getTransactionReceipt(transactionHash: string) {
-        const connection = await this.getConnectionWithFallback();
-        const transactionReceipt = await connection.getTransaction(transactionHash, { commitment: "finalized", maxSupportedTransactionVersion: 2 });
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
+            const transactionReceipt = await connection.getTransaction(transactionHash, { commitment: "finalized", maxSupportedTransactionVersion: 2 });
 
-        let isSuccessful = false;
-        // check if the transaction is successful
-        if (transactionReceipt.meta.err) {
-            isSuccessful = false;
-        } else {
-            isSuccessful = true;
-        }
-        return { transactionReceipt, isSuccessful };
+            let isSuccessful = false;
+            // check if the transaction is successful
+            if (transactionReceipt?.meta?.err == null) {
+                isSuccessful = true;
+            } else {
+                isSuccessful = false;
+            }
+
+            return { transactionReceipt, isSuccessful };
+        });
     }
 
     async getParsedTransactionReceipt(transactionHash: string) {
-        const connection = await this.getConnectionWithFallback();
-        const transactionReceipt = await connection.getParsedTransaction(transactionHash);
-        return transactionReceipt;
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
+            const transactionReceipt = await connection.getParsedTransaction(transactionHash, { commitment: "finalized", maxSupportedTransactionVersion: 2 });
+            return transactionReceipt;
+        });
     }
 
     async getBothTransactionReceipt(transactionHash: string) {
-        const connection = await this.getConnectionWithFallback();
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
 
-        let latestBlockhash = await this.getLatestBlockhash();
+            let latestBlockhash = await this.getLatestBlockhash();
 
-        let confirmation_response = await connection.confirmTransaction({ signature: transactionHash, ...latestBlockhash });
-        let transactionReceipt = await connection.getTransaction(transactionHash, { commitment: "finalized", maxSupportedTransactionVersion: 2 });
-        let parsedTransactionReceipt = await connection.getParsedTransaction(transactionHash);
+            let confirmation_response = await connection.confirmTransaction({ signature: transactionHash, ...latestBlockhash });
+            let transactionReceipt = await connection.getTransaction(transactionHash, { commitment: "finalized", maxSupportedTransactionVersion: 2 });
+            let parsedTransactionReceipt = await connection.getParsedTransaction(transactionHash, { commitment: "finalized", maxSupportedTransactionVersion: 2 });
 
-        return { confirmation_response, transactionReceipt, parsedTransactionReceipt };
+            return { confirmation_response, transactionReceipt, parsedTransactionReceipt };
+        });
     }
 
     async signTx(transaction: string, arrayOfStringKeypairs: string[]) {
-        let arrayOfKeypairs: Keypair[] = arrayOfStringKeypairs.map(keypair => Keypair.fromSecretKey(new Uint8Array(keypair.split(',').map(Number))));
-        // Transaction.from: Parse a wire transaction into a Transaction object
-        // Transaction.populate: Populate Transaction object from message and signatures
-        let rawTransaction = Transaction.from(Buffer.from(transaction, 'base64'));
-        rawTransaction.sign(...arrayOfKeypairs);
-        return rawTransaction.serializeMessage();
+        return this.retry(async () => {
+            let arrayOfKeypairs: Keypair[] = arrayOfStringKeypairs.map(keypair => Keypair.fromSecretKey(new Uint8Array(keypair.split(',').map(Number))));
+            // Transaction.from: Parse a wire transaction into a Transaction object
+            // Transaction.populate: Populate Transaction object from message and signatures
+            let rawTransaction = Transaction.from(Buffer.from(transaction, 'base64'));
+            rawTransaction.sign(...arrayOfKeypairs);
+            return rawTransaction.serializeMessage();
+        });
     }
 
     async sendSignedTx(transaction: string) {
-        const connection = await this.getConnectionWithFallback();
-
-        // Transaction.from: Parse a wire transaction into a Transaction object
-        // Transaction.populate: Populate Transaction object from message and signatures
-        let signedTransaction = Transaction.from(Buffer.from(transaction, 'base64'));
-        let transactionHash = connection.sendRawTransaction(signedTransaction.serialize());
-        return transactionHash;
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
+            try {
+                // Transaction.from: Parse a wire transaction into a Transaction object
+                // Transaction.populate: Populate Transaction object from message and signatures
+                let signedTransaction = Transaction.from(Buffer.from(transaction, 'base64'));
+                let transactionHash = connection.sendRawTransaction(signedTransaction.serialize());
+                return transactionHash;
+            } catch (error) {
+                if (error instanceof SendTransactionError) {
+                    console.log("SendTransactionError: ", error);
+                    console.log("SendTransactionError getLogs: ", await error.getLogs(connection));
+                }
+                throw error;
+            }
+        });
     }
 
     async signAndSendTx(transaction: string, arrayOfStringKeypairs: string[]) {
-        const connection = await this.getConnectionWithFallback();
-        let arrayOfKeypairs: Keypair[] = arrayOfStringKeypairs.map(keypair => Keypair.fromSecretKey(new Uint8Array(keypair.split(',').map(Number))));
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
+            let arrayOfKeypairs: Keypair[] = arrayOfStringKeypairs.map(keypair => Keypair.fromSecretKey(new Uint8Array(keypair.split(',').map(Number))));
 
-        // Transaction.from: Parse a wire transaction into a Transaction object
-        // Transaction.populate: Populate Transaction object from message and signatures
-        let rawTransaction = Transaction.from(Buffer.from(transaction, 'base64'));
-        rawTransaction.sign(...arrayOfKeypairs);
-        let transactionHash = connection.sendRawTransaction(rawTransaction.serialize());
-        return transactionHash;
+            try {
+                // Transaction.from: Parse a wire transaction into a Transaction object
+                // Transaction.populate: Populate Transaction object from message and signatures
+                let rawTransaction = Transaction.from(Buffer.from(transaction, 'base64'));
+                rawTransaction.sign(...arrayOfKeypairs);
+                let transactionHash = connection.sendRawTransaction(rawTransaction.serialize());
+                return transactionHash;
+            } catch (error) {
+                if (error instanceof SendTransactionError) {
+                    console.log("SendTransactionError: ", error);
+                    console.log("SendTransactionError getLogs: ", await error.getLogs(connection));
+                }
+                throw error;
+            }
+        });
     }
 
     async confirmTransaction(transactionHash: string) {
-        const connection = await this.getConnectionWithFallback();
-        let latestBlockhash = await this.getLatestBlockhash();
-        let confirmation_response = await connection.confirmTransaction({ signature: transactionHash, ...latestBlockhash });
-        return confirmation_response;
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
+            let latestBlockhash = await this.getLatestBlockhash();
+            let confirmation_response = await connection.confirmTransaction({ signature: transactionHash, ...latestBlockhash });
+            return confirmation_response;
+        });
     }
 
     // Native Tokens
     async getSOLBalance(accountToFetch: string) {
-        const connection = await this.getConnectionWithFallback();
-        let userPublicKey = new PublicKey(accountToFetch);
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
+            let userPublicKey = new PublicKey(accountToFetch);
 
-        let balance = await connection.getBalance(userPublicKey);
-        return { balanceInLamports: balance, balanceInSol: balance / LAMPORTS_PER_SOL };
+            let balance = await connection.getBalance(userPublicKey);
+            return { balanceInLamports: balance, balanceInSol: balance / LAMPORTS_PER_SOL };
+        });
     }
 
     async tx_transferSOL(fromAddress: string, recipientAddress: string, amount: number) {
-        const connection = await this.getConnectionWithFallback();
-        let createAccountFlag = false;
-        let createAccountIx = null;
+        return this.retry(async () => {
+            const connection = await this.getConnectionWithFallback();
+            let createAccountFlag = false;
+            let createAccountIx = null;
 
-        // TODO: check if the recipient address is a valid address created on Solana ledger (paid min rent), if not, add ix for CreateAccount
-        const recipientAccountInfo = await connection.getAccountInfo(new PublicKey(recipientAddress));
-        if (!recipientAccountInfo) {
-            console.log("Recipient account does not exist on Solana Ledger. Creating System Account...");
-            // Create account ix
-            createAccountIx = new TransactionInstruction(
-                SystemProgram.createAccount({
-                    /** The account that will transfer lamports to the created account */
+            // TODO: check if the recipient address is a valid address created on Solana ledger (paid min rent), if not, add ix for CreateAccount
+            const recipientAccountInfo = await connection.getAccountInfo(new PublicKey(recipientAddress));
+            if (!recipientAccountInfo) {
+                console.log("Recipient account does not exist on Solana Ledger. Creating System Account...");
+                // Create account ix
+                createAccountIx = new TransactionInstruction(
+                    SystemProgram.createAccount({
+                        /** The account that will transfer lamports to the created account */
+                        fromPubkey: new PublicKey(fromAddress),
+                        /** Public key of the created account */
+                        newAccountPubkey: new PublicKey(recipientAddress),
+                        /** Amount of lamports to transfer to the created account */
+                        lamports: 890880, // solana rent 0 // Rent-exempt minimum: 0.00089088 SOL // 890880 lamports, 2 Yr Rent Exempt
+                        /** Amount of space in bytes to allocate to the created account */
+                        space: 0,
+                        /** Public key of the program to assign as the owner of the created account */
+                        programId: SystemProgram.programId
+                    })
+                );
+                createAccountFlag = true;
+            }
+
+            const transaction = new Transaction().add(
+                createAccountFlag ? createAccountIx : null,
+                SystemProgram.transfer({
                     fromPubkey: new PublicKey(fromAddress),
-                    /** Public key of the created account */
-                    newAccountPubkey: new PublicKey(recipientAddress),
-                    /** Amount of lamports to transfer to the created account */
-                    lamports: 890880, // solana rent 0 // Rent-exempt minimum: 0.00089088 SOL // 890880 lamports, 2 Yr Rent Exempt
-                    /** Amount of space in bytes to allocate to the created account */
-                    space: 0,
-                    /** Public key of the program to assign as the owner of the created account */
-                    programId: SystemProgram.programId
+                    toPubkey: new PublicKey(recipientAddress),
+                    lamports: amount
                 })
             );
-            createAccountFlag = true;
-        }
 
-        const transaction = new Transaction().add(
-            createAccountFlag ? createAccountIx : null,
-            SystemProgram.transfer({
-                fromPubkey: new PublicKey(fromAddress),
-                toPubkey: new PublicKey(recipientAddress),
-                lamports: amount
-            })
-        );
+            const { blockhash } = await this.getLatestBlockhash();
+            transaction.recentBlockhash = blockhash;
+            transaction.feePayer = new PublicKey(fromAddress);
 
-        const { blockhash } = await this.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = new PublicKey(fromAddress);
-
-        return transaction.serializeMessage().toString('base64');
+            return transaction.serializeMessage().toString('base64');
+        });
     }
 
     async getPreAndPostSolanaBalance(transactionHash: string, owner: string) {
-        let parsedTx = await this.getParsedTransactionReceipt(transactionHash);
-        const accountKeys = parsedTx.transaction.message.accountKeys.map(key => key.pubkey.toString());
-        const ownerIndex = accountKeys.indexOf(owner);
+        return this.retry(async () => {
+            let parsedTx = await this.getParsedTransactionReceipt(transactionHash);
+            const accountKeys = parsedTx.transaction.message.accountKeys.map(key => key.pubkey.toString());
+            const ownerIndex = accountKeys.indexOf(owner);
 
-        const preBalance = parsedTx.meta?.preBalances[ownerIndex];
-        const postBalance = parsedTx.meta?.postBalances[ownerIndex];
+            const preBalance = parsedTx.meta?.preBalances[ownerIndex];
+            const postBalance = parsedTx.meta?.postBalances[ownerIndex];
 
-        return {
-            preBalance: preBalance,
-            postBalance: postBalance,
-            changeInLamports: postBalance - preBalance,
-            changeInSol: (postBalance - preBalance) / 10 ** 9
-        }
+            return {
+                preBalance: preBalance,
+                postBalance: postBalance,
+                changeInLamports: postBalance - preBalance,
+                changeInSol: (postBalance - preBalance) / 10 ** 9
+            }
+        });
     }
 
     // // SPL Token Program
     // getTokenAccount
     async getTokenAccount(mintAddress: string, owner: string) {
-        let tokenAccount = (getAssociatedTokenAddressSync(new PublicKey(mintAddress), new PublicKey(owner))).toBase58();
-        return tokenAccount;
+        return this.retry(async () => {
+            let tokenAccount = (getAssociatedTokenAddressSync(new PublicKey(mintAddress), new PublicKey(owner))).toBase58();
+            return tokenAccount;
+        });
     }
     // ix_createTokenAccount
     async ix_createTokenAccount(mintAddress: string, owner: string) {
-        let ownerPublicKey = new PublicKey(owner);
-        let ownerATA = new PublicKey(this.getTokenAccount(mintAddress, owner));
+        return this.retry(async () => {
+            let ownerPublicKey = new PublicKey(owner);
+            let ownerATA = new PublicKey(this.getTokenAccount(mintAddress, owner));
 
-        let createTokenAccountIx: TransactionInstruction = createAssociatedTokenAccountIdempotentInstruction(
-            ownerPublicKey,
-            ownerATA,
-            ownerPublicKey,
-            new PublicKey(mintAddress),
-        )
+            let createTokenAccountIx: TransactionInstruction = createAssociatedTokenAccountIdempotentInstruction(
+                ownerPublicKey,
+                ownerATA,
+                ownerPublicKey,
+                new PublicKey(mintAddress),
+            )
 
-        return createTokenAccountIx;
+            return createTokenAccountIx;
+        });
     }
     // ix_transferToken
     async ix_transferToken(mintAddress: string, owner: string, recipientAddress: string, amount: number) {
-        let ownerPublicKey = new PublicKey(owner);
-        let ownerATA = new PublicKey(this.getTokenAccount(mintAddress, owner));
-        let recipientATA = new PublicKey(this.getTokenAccount(mintAddress, recipientAddress));
+        return this.retry(async () => {
+            let ownerPublicKey = new PublicKey(owner);
+            let ownerATA = new PublicKey(this.getTokenAccount(mintAddress, owner));
+            let recipientATA = new PublicKey(this.getTokenAccount(mintAddress, recipientAddress));
 
-        let transferTokenIx: TransactionInstruction = createTransferInstruction(
-            ownerATA,
-            recipientATA,
-            ownerPublicKey,
-            amount
-        )
-        return transferTokenIx;
+            let transferTokenIx: TransactionInstruction = createTransferInstruction(
+                ownerATA,
+                recipientATA,
+                ownerPublicKey,
+                amount
+            )
+            return transferTokenIx;
+        });
     }
     // ix_syncNativeToken
     async ix_syncNativeToken(recipientAddress: string) {
-        let recipientATA = new PublicKey(this.getTokenAccount(NATIVE_MINT.toBase58(), recipientAddress));
+        return this.retry(async () => {
+            let recipientATA = new PublicKey(this.getTokenAccount(NATIVE_MINT.toBase58(), recipientAddress));
 
-        let syncNativeTokenIx: TransactionInstruction = createSyncNativeInstruction(recipientATA)
-        return syncNativeTokenIx;
+            let syncNativeTokenIx: TransactionInstruction = createSyncNativeInstruction(recipientATA)
+            return syncNativeTokenIx;
+        });
     }
     // ix_unwrapSolCloseTokenAccount // unwrap wsolana to solana
     async ix_unwrapSolCloseTokenAccount(recipientAddress: string) {
-        let ownerPublicKey = new PublicKey(recipientAddress);
-        let recipientATA = new PublicKey(this.getTokenAccount(NATIVE_MINT.toBase58(), recipientAddress));
+        return this.retry(async () => {
+            let ownerPublicKey = new PublicKey(recipientAddress);
+            let recipientATA = new PublicKey(this.getTokenAccount(NATIVE_MINT.toBase58(), recipientAddress));
 
-        let closeTokenAccountIx: TransactionInstruction = createCloseAccountInstruction(
-            recipientATA, // WSOL account in case of unwrapping wsolana to solana
-            ownerPublicKey, // Destination (your SOL account)
-            ownerPublicKey, // Owner of the WSOL account
-        )
-        return closeTokenAccountIx;
+            let closeTokenAccountIx: TransactionInstruction = createCloseAccountInstruction(
+                recipientATA, // WSOL account in case of unwrapping wsolana to solana
+                ownerPublicKey, // Destination (your SOL account)
+                ownerPublicKey, // Owner of the WSOL account
+            )
+            return closeTokenAccountIx;
+        });
     }
     // getAllTokenAccounts
     async getAllTokenAccounts(owner: string) {
-        const ownerPublicKey = new PublicKey(owner);
+        return this.retry(async () => {
+            const ownerPublicKey = new PublicKey(owner);
 
-        const connection = await this.getConnectionWithFallback();
-        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(ownerPublicKey, { programId: TOKEN_PROGRAM_ID });
-        return tokenAccounts;
+            const connection = await this.getConnectionWithFallback();
+            const tokenAccounts = await connection.getParsedTokenAccountsByOwner(ownerPublicKey, { programId: TOKEN_PROGRAM_ID });
+            return tokenAccounts;
+        });
     }
 
     // getPreAndPostTokenBalance
     async getPreAndPostTokenBalance(transactionHash: string, owner: string) {
+        return this.retry(async () => {
 
-        let parsedTx = await this.getParsedTransactionReceipt(transactionHash);
+            let parsedTx = await this.getParsedTransactionReceipt(transactionHash);
 
-        const accountKeys = parsedTx.transaction.message.accountKeys.map(key => key.pubkey.toString());
-        // console.log("accountKeys.length", accountKeys.length);
+            const accountKeys = parsedTx.transaction.message.accountKeys.map(key => key.pubkey.toString());
+            // console.log("accountKeys.length", accountKeys.length);
 
-        const ownerIndex = accountKeys.indexOf(owner);
-        // console.log("index at which owner's token balance is expected", ownerIndex);
+            const ownerIndex = accountKeys.indexOf(owner);
+            // console.log("index at which owner's token balance is expected", ownerIndex);
 
-        const preBalances = parsedTx.meta?.preTokenBalances || [];
-        const postBalances = parsedTx.meta?.postTokenBalances || [];
+            const preBalances = parsedTx.meta?.preTokenBalances || [];
+            const postBalances = parsedTx.meta?.postTokenBalances || [];
 
-        // Create maps for pre and post balances
-        const preBalanceMap = [];
-        const postBalanceMap = [];
-        const differenceBalanceMap = []; // calculate the difference between pre and post balances in a given transaction
+            // Create maps for pre and post balances
+            const preBalanceMap = [];
+            const postBalanceMap = [];
+            const differenceBalanceMap = []; // calculate the difference between pre and post balances in a given transaction
 
-        // Process pre-balances
-        preBalances.forEach(balance => {
-            if (balance.owner === owner) {
-                preBalanceMap.push({
-                    owner: balance.owner,
-                    mint: balance.mint,
-                    uiAmount: balance.uiTokenAmount?.uiAmount || 0,
-                    decimals: balance.uiTokenAmount?.decimals
-                });
-            }
+            // Process pre-balances
+            preBalances.forEach(balance => {
+                if (balance.owner === owner) {
+                    preBalanceMap.push({
+                        owner: balance.owner,
+                        mint: balance.mint,
+                        uiAmount: balance.uiTokenAmount?.uiAmount || 0,
+                        decimals: balance.uiTokenAmount?.decimals
+                    });
+                }
+            });
+
+            // Process post-balances
+            postBalances.forEach(balance => {
+                if (balance.owner === owner) {
+                    postBalanceMap.push({
+                        owner: balance.owner,
+                        mint: balance.mint,
+                        uiAmount: balance.uiTokenAmount?.uiAmount || 0,
+                        decimals: balance.uiTokenAmount?.decimals
+                    });
+                }
+            });
+
+            // check postBalanceMap for owner, find common owner and mint in preBalanceMap
+            postBalanceMap.forEach(balance => {
+                const preBalance = preBalanceMap.find(b => b.mint === balance.mint && b.owner === balance.owner);
+                // console.log("balance.uiAmount: ", balance.uiAmount, "preBalance.uiAmount: ", preBalance.uiAmount)
+                if (preBalance) {
+                    differenceBalanceMap.push({
+                        owner: balance.owner,
+                        mint: balance.mint,
+                        change: (balance.uiAmount) - (preBalance.uiAmount),
+                        decimals: balance.decimals
+                    });
+                }
+            });
+
+            console.log("differenceBalanceMap", differenceBalanceMap);
+
+            // Sort changes to find input (negative) and output (positive) tokens
+            const inputToken = differenceBalanceMap.find(c => c.change < 0);
+            const outputToken = differenceBalanceMap.find(c => c.change > 0);
+
+            return {
+                inputToken: inputToken ? {
+                    amount: Math.abs(inputToken?.change || 0),
+                    mint: inputToken?.mint || '',
+                    owner: inputToken?.owner || '',
+                    decimals: inputToken?.decimals
+                } : null,
+                outputToken: outputToken ? {
+                    amount: Math.abs(outputToken?.change || 0),
+                    mint: outputToken?.mint || '',
+                    owner: outputToken?.owner || '',
+                    decimals: outputToken?.decimals
+                } : null,
+                timestamp: parsedTx.blockTime ? parsedTx.blockTime * 1000 : Date.now()
+            };
         });
-
-        // Process post-balances
-        postBalances.forEach(balance => {
-            if (balance.owner === owner) {
-                postBalanceMap.push({
-                    owner: balance.owner,
-                    mint: balance.mint,
-                    uiAmount: balance.uiTokenAmount?.uiAmount || 0,
-                    decimals: balance.uiTokenAmount?.decimals
-                });
-            }
-        });
-
-        // check postBalanceMap for owner, find common owner and mint in preBalanceMap
-        postBalanceMap.forEach(balance => {
-            const preBalance = preBalanceMap.find(b => b.mint === balance.mint && b.owner === balance.owner);
-            // console.log("balance.uiAmount: ", balance.uiAmount, "preBalance.uiAmount: ", preBalance.uiAmount)
-            if (preBalance) {
-                differenceBalanceMap.push({
-                    owner: balance.owner,
-                    mint: balance.mint,
-                    change: (balance.uiAmount) - (preBalance.uiAmount),
-                    decimals: balance.decimals
-                });
-            }
-        });
-
-        console.log("differenceBalanceMap", differenceBalanceMap);
-
-        // Sort changes to find input (negative) and output (positive) tokens
-        const inputToken = differenceBalanceMap.find(c => c.change < 0);
-        const outputToken = differenceBalanceMap.find(c => c.change > 0);
-
-        return {
-            inputToken: inputToken ? {
-                amount: Math.abs(inputToken?.change || 0),
-                mint: inputToken?.mint || '',
-                owner: inputToken?.owner || '',
-                decimals: inputToken?.decimals
-            } : null,
-            outputToken: outputToken ? {
-                amount: Math.abs(outputToken?.change || 0),
-                mint: outputToken?.mint || '',
-                owner: outputToken?.owner || '',
-                decimals: outputToken?.decimals
-            } : null,
-            timestamp: parsedTx.blockTime ? parsedTx.blockTime * 1000 : Date.now()
-        };
     }
 
     // // Raydium
@@ -507,283 +653,291 @@ export class SolanaService {
 
     // getAllTokenAccountsWithRaydiumPrices
     async getAllTokenAccountsWithRaydiumPrices(owner: string) {
-        const ownerPublicKey = new PublicKey(owner);
-        const connection = await this.getConnectionWithFallback();
-        const tokenAccounts = (await connection.getParsedTokenAccountsByOwner(ownerPublicKey, { programId: TOKEN_PROGRAM_ID })).value;
+        return this.retry(async () => {
+            const ownerPublicKey = new PublicKey(owner);
+            const connection = await this.getConnectionWithFallback();
+            const tokenAccounts = (await connection.getParsedTokenAccountsByOwner(ownerPublicKey, { programId: TOKEN_PROGRAM_ID })).value;
 
-        let tokenAccountsObj = [];
+            let tokenAccountsObj = [];
 
-        // print token mint, owner, tokenATA amount, decimals
-        tokenAccounts.forEach(tokenAccount => {
-            let obj = {
-                mint: tokenAccount.account.data.parsed.info.mint,
-                owner: tokenAccount.account.data.parsed.info.owner,
-                tokenATA: tokenAccount.pubkey,
-                amount: tokenAccount.account.data.parsed.info.tokenAmount.uiAmountString,
-                decimals: tokenAccount.account.data.parsed.info.tokenAmount.decimals,
+            // print token mint, owner, tokenATA amount, decimals
+            tokenAccounts.forEach(tokenAccount => {
+                let obj = {
+                    mint: tokenAccount.account.data.parsed.info.mint,
+                    owner: tokenAccount.account.data.parsed.info.owner,
+                    tokenATA: tokenAccount.pubkey,
+                    amount: tokenAccount.account.data.parsed.info.tokenAmount.uiAmountString,
+                    decimals: tokenAccount.account.data.parsed.info.tokenAmount.decimals,
+                }
+                tokenAccountsObj.push(obj);
+            });
+
+            let tokenAddresses = [];
+            for (let i = 0; i < tokenAccountsObj.length; i++) {
+                let tokenAccount = tokenAccountsObj[i];
+                tokenAddresses.push(tokenAccount.mint);
             }
-            tokenAccountsObj.push(obj);
-        });
+            try {
+                console.log(
+                    `Fetching prices and volume for token addresses: ${tokenAddresses.join(', ')}`,
+                );
+                const url = `https://api.raydium.io/v2/main/pairs`; // Raydium's pairs endpoint
+                const response = await axios.get(url);
+                const pairs = response.data;
 
-        let tokenAddresses = [];
-        for (let i = 0; i < tokenAccountsObj.length; i++) {
-            let tokenAccount = tokenAccountsObj[i];
-            tokenAddresses.push(tokenAccount.mint);
-        }
-        try {
-            console.log(
-                `Fetching prices and volume for token addresses: ${tokenAddresses.join(', ')}`,
-            );
-            const url = `https://api.raydium.io/v2/main/pairs`; // Raydium's pairs endpoint
-            const response = await axios.get(url);
-            const pairs = response.data;
+                const prices = [];
 
-            const prices = [];
-
-            // Iterate through each token address and fetch its price and volume
-            for (const tokenAddress of tokenAddresses) {
-                try {
-                    // Find the token pair where the tokenAddress is either in baseMint or quoteMint
-                    const tokenPair = pairs.find(
-                        (pair) =>
-                            (pair.baseMint === tokenAddress || pair.quoteMint === tokenAddress) &&
-                            (pair.baseMint === 'So11111111111111111111111111111111111111112' ||
-                                pair.quoteMint === 'So11111111111111111111111111111111111111112'),
-                    );
-
-                    if (!tokenPair) {
-                        console.log(`Token pair not found for address: ${tokenAddress}`);
-                        continue; // Skip to the next token address
-                    }
-
-                    const price1solXtoken = tokenPair.price; // Price as a string
-                    // console.log(
-                    //     '🚀 ~ DexScreenerService ~ getTokenPrice ~ price1solXtoken:',
-                    //     price1solXtoken,
-                    // );
-
-                    let resultWithPrecision;
-
-                    if (tokenPair.quoteMint === tokenAddress) {
-                        // If address is found in quoteMint, perform the calculation
-                        const a = new Decimal('1'); // Decimal for 1
-                        const b = new Decimal(price1solXtoken); // Price as a Decimal
-
-                        const precision = 18; // Desired precision
-
-                        // Perform the division directly with decimal.js
-                        const result = a.div(b);
-
-                        // Adjust the result to the desired precision and convert it to a string
-                        resultWithPrecision = result.toFixed(precision); // 18 decimal places
-
-                        // Convert result to a readable format
-                        resultWithPrecision = new Decimal(resultWithPrecision).toFixed(
-                            precision,
-                            Decimal.ROUND_DOWN,
+                // Iterate through each token address and fetch its price and volume
+                for (const tokenAddress of tokenAddresses) {
+                    try {
+                        // Find the token pair where the tokenAddress is either in baseMint or quoteMint
+                        const tokenPair = pairs.find(
+                            (pair) =>
+                                (pair.baseMint === tokenAddress || pair.quoteMint === tokenAddress) &&
+                                (pair.baseMint === 'So11111111111111111111111111111111111111112' ||
+                                    pair.quoteMint === 'So11111111111111111111111111111111111111112'),
                         );
 
-                        // console.log('Result with precision:', resultWithPrecision); // Result as a string with 18 decimal places
-                    } else {
-                        // If address is found in baseMint, return the price as is
-                        resultWithPrecision = price1solXtoken;
+                        if (!tokenPair) {
+                            console.log(`Token pair not found for address: ${tokenAddress}`);
+                            continue; // Skip to the next token address
+                        }
+
+                        const price1solXtoken = tokenPair.price; // Price as a string
+                        // console.log(
+                        //     '🚀 ~ DexScreenerService ~ getTokenPrice ~ price1solXtoken:',
+                        //     price1solXtoken,
+                        // );
+
+                        let resultWithPrecision;
+
+                        if (tokenPair.quoteMint === tokenAddress) {
+                            // If address is found in quoteMint, perform the calculation
+                            const a = new Decimal('1'); // Decimal for 1
+                            const b = new Decimal(price1solXtoken); // Price as a Decimal
+
+                            const precision = 18; // Desired precision
+
+                            // Perform the division directly with decimal.js
+                            const result = a.div(b);
+
+                            // Adjust the result to the desired precision and convert it to a string
+                            resultWithPrecision = result.toFixed(precision); // 18 decimal places
+
+                            // Convert result to a readable format
+                            resultWithPrecision = new Decimal(resultWithPrecision).toFixed(
+                                precision,
+                                Decimal.ROUND_DOWN,
+                            );
+
+                            // console.log('Result with precision:', resultWithPrecision); // Result as a string with 18 decimal places
+                        } else {
+                            // If address is found in baseMint, return the price as is
+                            resultWithPrecision = price1solXtoken;
+                        }
+
+                        // Ensure the result is in a readable format (not scientific notation)
+                        resultWithPrecision = parseFloat(resultWithPrecision).toLocaleString(
+                            undefined,
+                            { maximumFractionDigits: 18 },
+                        );
+
+                        // Get the 24-hour volume in USD
+                        const volume24h = parseFloat(tokenPair.volume24h || '0');
+                        const formattedVolume24h =
+                            volume24h > 0 ? volume24h.toFixed(2) : 'No volume data'; // Fallback to message
+
+                        // Get the volume for the last 7 days
+                        const volume7d = tokenPair.volume7d
+                            ? parseFloat(tokenPair.volume7d)
+                            : 0; // Use 7-day volume if available
+                        const formattedVolume7d =
+                            volume7d > 0 ? volume7d.toFixed(2) : 'No volume data'; // Fallback to message
+
+                        // Get the volume for the last 30 days
+                        const volume30d = parseFloat(tokenPair.volume30d || '0');
+                        const formattedVolume30d =
+                            volume30d > 0 ? volume30d.toFixed(2) : 'No volume data'; // Fallback to message
+
+                        const ammid = tokenPair.ammId;
+                        console.log('🚀 ~ DexScreenerService ~ getTokendetails ~ ammid:', ammid);
+
+                        // get mint details in tokenAccountObj
+                        let mintDetails = tokenAccountsObj.find(tokenAccount => tokenAccount.mint === tokenAddress);
+                        // console.log("mintDetails", mintDetails);
+
+                        // Push the result for the current token into the prices array
+                        prices.push({
+                            tokenAddress,
+                            price: resultWithPrecision,
+                            ammid: ammid,
+                            pricegivebyraydium: price1solXtoken,
+                            volume24h: formattedVolume24h,
+                            volume7d: formattedVolume7d,
+                            volume30d: formattedVolume30d,
+                            baseSymbol: tokenPair.baseSymbol,
+                            quoteSymbol: tokenPair.quoteSymbol,
+
+                            owner: mintDetails.owner,
+                            tokenATA: mintDetails.tokenATA,
+                            amount: mintDetails.amount,
+                            decimals: mintDetails.decimals
+                        });
+                    } catch (innerError) {
+                        // Catch any error related to a single token, log it, and continue with the next
+                        console.error(`Error processing token address ${tokenAddress}: ${innerError.message}`);
+                        continue; // Skip to the next token address
                     }
-
-                    // Ensure the result is in a readable format (not scientific notation)
-                    resultWithPrecision = parseFloat(resultWithPrecision).toLocaleString(
-                        undefined,
-                        { maximumFractionDigits: 18 },
-                    );
-
-                    // Get the 24-hour volume in USD
-                    const volume24h = parseFloat(tokenPair.volume24h || '0');
-                    const formattedVolume24h =
-                        volume24h > 0 ? volume24h.toFixed(2) : 'No volume data'; // Fallback to message
-
-                    // Get the volume for the last 7 days
-                    const volume7d = tokenPair.volume7d
-                        ? parseFloat(tokenPair.volume7d)
-                        : 0; // Use 7-day volume if available
-                    const formattedVolume7d =
-                        volume7d > 0 ? volume7d.toFixed(2) : 'No volume data'; // Fallback to message
-
-                    // Get the volume for the last 30 days
-                    const volume30d = parseFloat(tokenPair.volume30d || '0');
-                    const formattedVolume30d =
-                        volume30d > 0 ? volume30d.toFixed(2) : 'No volume data'; // Fallback to message
-
-                    const ammid = tokenPair.ammId;
-                    console.log('🚀 ~ DexScreenerService ~ getTokendetails ~ ammid:', ammid);
-
-                    // get mint details in tokenAccountObj
-                    let mintDetails = tokenAccountsObj.find(tokenAccount => tokenAccount.mint === tokenAddress);
-                    // console.log("mintDetails", mintDetails);
-
-                    // Push the result for the current token into the prices array
-                    prices.push({
-                        tokenAddress,
-                        price: resultWithPrecision,
-                        ammid: ammid,
-                        pricegivebyraydium: price1solXtoken,
-                        volume24h: formattedVolume24h,
-                        volume7d: formattedVolume7d,
-                        volume30d: formattedVolume30d,
-                        baseSymbol: tokenPair.baseSymbol,
-                        quoteSymbol: tokenPair.quoteSymbol,
-
-                        owner: mintDetails.owner,
-                        tokenATA: mintDetails.tokenATA,
-                        amount: mintDetails.amount,
-                        decimals: mintDetails.decimals
-                    });
-                } catch (innerError) {
-                    // Catch any error related to a single token, log it, and continue with the next
-                    console.error(`Error processing token address ${tokenAddress}: ${innerError.message}`);
-                    continue; // Skip to the next token address
                 }
-            }
 
-            return prices;
-        } catch (error) {
-            console.error(
-                `Error fetching prices and volumes for token addresses: ${error.message}`,
-            );
-        }
+                return prices;
+            } catch (error) {
+                console.error(
+                    `Error fetching prices and volumes for token addresses: ${error.message}`,
+                );
+                throw error;
+            }
+        });
     }
 
     // getRaydiumPairsWithRaydiumPrices -> getAMMId
     async getRaydiumPairsWithRaydiumPrices(tokenAddresses: string[]): Promise<any[]> {
-        try {
-          console.log(
-            `Fetching prices and volume for token addresses: ${tokenAddresses.join(', ')}`,
-          );
-          const url = `https://api.raydium.io/v2/main/pairs`; // Raydium's pairs endpoint
-          const response = await axios.get(url);
-          const pairs = response.data;
-      
-          const prices: any[] = [];
-      
-          // Iterate through each token address and fetch its price and volume
-          for (const tokenAddress of tokenAddresses) {
+        return this.retry(async () => {
             try {
-              // Find the token pair where the tokenAddress is either in baseMint or quoteMint
-              const tokenPair = pairs.find(
-                (pair) =>
-                  (pair.baseMint === tokenAddress || pair.quoteMint === tokenAddress) &&
-                  (pair.baseMint === 'So11111111111111111111111111111111111111112' ||
-                    pair.quoteMint === 'So11111111111111111111111111111111111111112'),
-              );
-      
-              if (!tokenPair) {
-                console.log(`Token pair not found for address: ${tokenAddress}`);
-                continue; // Skip to the next token address
-              }
-      
-              const price1solXtoken: string = tokenPair.price; // Price as a string
-              console.log(
-                '🚀 ~ DexScreenerService ~ getTokenPrice ~ price1solXtoken:',
-                price1solXtoken,
-              );
-      
-              let resultWithPrecision: string;
-      
-              if (tokenPair.quoteMint === tokenAddress) {
-                // If address is found in quoteMint, perform the calculation
-                const a = new Decimal('1'); // Decimal for 1
-                const b = new Decimal(price1solXtoken); // Price as a Decimal
-      
-                const precision = 18; // Desired precision
-      
-                // Perform the division directly with decimal.js
-                const result = a.div(b);
-      
-                // Adjust the result to the desired precision and convert it to a string
-                resultWithPrecision = result.toFixed(precision); // 18 decimal places
-      
-                // Convert result to a readable format
-                resultWithPrecision = new Decimal(resultWithPrecision).toFixed(
-                  precision,
-                  Decimal.ROUND_DOWN,
+                console.log(
+                    `Fetching prices and volume for token addresses: ${tokenAddresses.join(', ')}`,
                 );
-      
-                console.log('Result with precision:', resultWithPrecision); // Result as a string with 18 decimal places
-              } else {
-                // If address is found in baseMint, return the price as is
-                resultWithPrecision = price1solXtoken;
-              }
-      
-              // Ensure the result is in a readable format (not scientific notation)
-              resultWithPrecision = parseFloat(resultWithPrecision).toLocaleString(
-                undefined,
-                { maximumFractionDigits: 18 },
-              );
-      
-              // Get the 24-hour volume in USD
-              const volume24h: number = parseFloat(tokenPair.volume24h || '0');
-              const formattedVolume24h: string =
-                volume24h > 0 ? volume24h.toFixed(2) : 'No volume data'; // Fallback to message
-      
-              // Get the volume for the last 7 days
-              const volume7d: number = tokenPair.volume7d
-                ? parseFloat(tokenPair.volume7d)
-                : 0; // Use 7-day volume if available
-              const formattedVolume7d: string =
-                volume7d > 0 ? volume7d.toFixed(2) : 'No volume data'; // Fallback to message
-      
-              // Get the volume for the last 30 days
-              const volume30d: number = parseFloat(tokenPair.volume30d || '0');
-              const formattedVolume30d: string =
-                volume30d > 0 ? volume30d.toFixed(2) : 'No volume data'; // Fallback to message
-      
-                const ammid: string = tokenPair.ammId;
-                console.log('🚀 ~ DexScreenerService ~ getTokendetails ~ ammid:', ammid);
-          
-              // Push the result for the current token into the prices array
-              prices.push({
-                tokenAddress,
-                price: resultWithPrecision,
-                ammid: ammid,
-                pricegivebyraydium: price1solXtoken,
-                volume24h: formattedVolume24h,
-                volume7d: formattedVolume7d,
-                volume30d: formattedVolume30d,
-                baseSymbol: tokenPair.baseSymbol,
-                quoteSymbol: tokenPair.quoteSymbol,
-              });
-            } catch (innerError) {
-              // Catch any error related to a single token, log it, and continue with the next
-              console.error(`Error processing token address ${tokenAddress}: ${innerError.message}`);
-              continue; // Skip to the next token address
+                const url = `https://api.raydium.io/v2/main/pairs`; // Raydium's pairs endpoint
+                const response = await axios.get(url);
+                const pairs = response.data;
+
+                const prices: any[] = [];
+
+                // Iterate through each token address and fetch its price and volume
+                for (const tokenAddress of tokenAddresses) {
+                    try {
+                        // Find the token pair where the tokenAddress is either in baseMint or quoteMint
+                        const tokenPair = pairs.find(
+                            (pair) =>
+                                (pair.baseMint === tokenAddress || pair.quoteMint === tokenAddress) &&
+                                (pair.baseMint === 'So11111111111111111111111111111111111111112' ||
+                                    pair.quoteMint === 'So11111111111111111111111111111111111111112'),
+                        );
+
+                        if (!tokenPair) {
+                            console.log(`Token pair not found for address: ${tokenAddress}`);
+                            continue; // Skip to the next token address
+                        }
+
+                        const price1solXtoken: string = tokenPair.price; // Price as a string
+                        console.log(
+                            '🚀 ~ DexScreenerService ~ getTokenPrice ~ price1solXtoken:',
+                            price1solXtoken,
+                        );
+
+                        let resultWithPrecision: string;
+
+                        if (tokenPair.quoteMint === tokenAddress) {
+                            // If address is found in quoteMint, perform the calculation
+                            const a = new Decimal('1'); // Decimal for 1
+                            const b = new Decimal(price1solXtoken); // Price as a Decimal
+
+                            const precision = 18; // Desired precision
+
+                            // Perform the division directly with decimal.js
+                            const result = a.div(b);
+
+                            // Adjust the result to the desired precision and convert it to a string
+                            resultWithPrecision = result.toFixed(precision); // 18 decimal places
+
+                            // Convert result to a readable format
+                            resultWithPrecision = new Decimal(resultWithPrecision).toFixed(
+                                precision,
+                                Decimal.ROUND_DOWN,
+                            );
+
+                            console.log('Result with precision:', resultWithPrecision); // Result as a string with 18 decimal places
+                        } else {
+                            // If address is found in baseMint, return the price as is
+                            resultWithPrecision = price1solXtoken;
+                        }
+
+                        // Ensure the result is in a readable format (not scientific notation)
+                        resultWithPrecision = parseFloat(resultWithPrecision).toLocaleString(
+                            undefined,
+                            { maximumFractionDigits: 18 },
+                        );
+
+                        // Get the 24-hour volume in USD
+                        const volume24h: number = parseFloat(tokenPair.volume24h || '0');
+                        const formattedVolume24h: string =
+                            volume24h > 0 ? volume24h.toFixed(2) : 'No volume data'; // Fallback to message
+
+                        // Get the volume for the last 7 days
+                        const volume7d: number = tokenPair.volume7d
+                            ? parseFloat(tokenPair.volume7d)
+                            : 0; // Use 7-day volume if available
+                        const formattedVolume7d: string =
+                            volume7d > 0 ? volume7d.toFixed(2) : 'No volume data'; // Fallback to message
+
+                        // Get the volume for the last 30 days
+                        const volume30d: number = parseFloat(tokenPair.volume30d || '0');
+                        const formattedVolume30d: string =
+                            volume30d > 0 ? volume30d.toFixed(2) : 'No volume data'; // Fallback to message
+
+                        const ammid: string = tokenPair.ammId;
+                        console.log('🚀 ~ DexScreenerService ~ getTokendetails ~ ammid:', ammid);
+
+                        // Push the result for the current token into the prices array
+                        prices.push({
+                            tokenAddress,
+                            price: resultWithPrecision,
+                            ammid: ammid,
+                            pricegivebyraydium: price1solXtoken,
+                            volume24h: formattedVolume24h,
+                            volume7d: formattedVolume7d,
+                            volume30d: formattedVolume30d,
+                            baseSymbol: tokenPair.baseSymbol,
+                            quoteSymbol: tokenPair.quoteSymbol,
+                        });
+                    } catch (innerError) {
+                        // Catch any error related to a single token, log it, and continue with the next
+                        console.error(`Error processing token address ${tokenAddress}: ${innerError.message}`);
+                        continue; // Skip to the next token address
+                    }
+                }
+
+                return prices;
+            } catch (error) {
+                console.error(
+                    `Error fetching prices and volumes for token addresses: ${error.message}`,
+                );
+                throw error;
             }
-          }
-      
-          return prices;
-        } catch (error) {
-          console.error(
-            `Error fetching prices and volumes for token addresses: ${error.message}`,
-          );
-        }
-      }
-    
-      // getInputAndOutputTokenQtyFromTxReceiptPostSwap
+        });
+    }
+
+    // getInputAndOutputTokenQtyFromTxReceiptPostSwap
     async getInputAndOutputTokenQtyFromTxReceiptPostSwap(transactionHash: string, owner: string) {
-        let parsedTx = await this.getParsedTransactionReceipt(transactionHash);
+        return this.retry(async () => {
+            let parsedTx = await this.getParsedTransactionReceipt(transactionHash);
 
-        const result1 = await this.getPreAndPostTokenBalance(transactionHash, owner);
-        const result1SolBalance = await this.getPreAndPostSolanaBalance(transactionHash, owner);
+            const result1 = await this.getPreAndPostTokenBalance(transactionHash, owner);
+            const result1SolBalance = await this.getPreAndPostSolanaBalance(transactionHash, owner);
 
 
-        const owner2 = "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1" // fix raydium authority
-        const result2 = await this.getPreAndPostTokenBalance(transactionHash, owner2);
+            const owner2 = "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1" // fix raydium authority
+            const result2 = await this.getPreAndPostTokenBalance(transactionHash, owner2);
 
-        // now aggregate the results to common object, if inputToken is null, then use outputToken
-        const aggregatedResult = {
-            inputToken: result1.inputToken ? result1.inputToken : result2.outputToken,
-            outputToken: result1.outputToken ? result1.outputToken : result2.inputToken,
-            SolCostToUser: result1SolBalance.changeInSol,
-            timestamp: result1.timestamp ? result1.timestamp : result2.timestamp
-        };
-        return aggregatedResult;
+            // now aggregate the results to common object, if inputToken is null, then use outputToken
+            const aggregatedResult = {
+                inputToken: result1.inputToken ? result1.inputToken : result2.outputToken,
+                outputToken: result1.outputToken ? result1.outputToken : result2.inputToken,
+                SolCostToUser: result1SolBalance.changeInSol,
+                timestamp: result1.timestamp ? result1.timestamp : result2.timestamp
+            };
+            return aggregatedResult;
+        });
     }
 
     // // ix_swapRaydium

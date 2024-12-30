@@ -216,6 +216,7 @@ export class RaydiumSwapService {
         return legacyTransaction
     }
 
+    // // returns tx hash if successful, null if not
     async sendSignedSwapTransaction(fromToken: string,
         toToken: string,
         ammId: string,
@@ -238,7 +239,22 @@ export class RaydiumSwapService {
         const confirmation = await this.solanaService.confirmTransaction(txid)
         console.log("confirmation: ", confirmation)
 
-        return txid
+        if (confirmation?.value?.err == null) {
+            console.log("Transaction confirmed: ", txid);
+            const receipt = await this.solanaService.getTransactionReceipt(txid);
+            // return txid; // Return the transaction hash if successful
+
+            if (receipt?.isSuccessful) { // Check if isSuccessful is true
+                console.log("Transaction receipt indicates onchain success");
+                return txid; // Return the transaction hash if successful
+            } else {
+                console.log("Transaction receipt indicates onchain failure");
+                return null; // Return null if not successful
+            }
+        } else {
+            console.log("Transaction failed to confirm.");
+            return null; // Return null in case of an error
+        }
     }
 
     async simulateSignedSwapTransaction(fromToken: string,
