@@ -108,7 +108,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "localhost:3000/solana/getParsedTransactionReceipt/2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE",
+					"raw": "localhost:3000/solana/getParsedTransactionReceipt/ddytsCKXJ1DCv57JYp7aic2nMMBBjcKDVozUZ8we4i85LWcqTgML1rWFSqpgx5T1z6uGt22ssuajE6CHKXTQaz9",
 					"host": [
 						"localhost"
 					],
@@ -116,7 +116,7 @@
 					"path": [
 						"solana",
 						"getParsedTransactionReceipt",
-						"2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE"
+						"ddytsCKXJ1DCv57JYp7aic2nMMBBjcKDVozUZ8we4i85LWcqTgML1rWFSqpgx5T1z6uGt22ssuajE6CHKXTQaz9"
 					]
 				}
 			},
@@ -128,7 +128,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "localhost:3000/solana/getTransactionReceipt/2Y5hzpaSYSiM4U54jmA8yKqTCFCEaaYWAzF5uAHxugaXEo8gJehKXfFFtWyLPZnkgyhn65P39AWbuEtMyZRR9gfk",
+					"raw": "localhost:3000/solana/getTransactionReceipt/2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE",
 					"host": [
 						"localhost"
 					],
@@ -136,7 +136,7 @@
 					"path": [
 						"solana",
 						"getTransactionReceipt",
-						"2Y5hzpaSYSiM4U54jmA8yKqTCFCEaaYWAzF5uAHxugaXEo8gJehKXfFFtWyLPZnkgyhn65P39AWbuEtMyZRR9gfk"
+						"2rck7fS8dmJ1ZAa4SdPAdf5M3VnkhvUXPEjxMDoNxFoKxvQqeMtJE1aGYRiBraE2HNsB1PGYjX8rukZ41EbB3wmE"
 					]
 				}
 			},
@@ -280,9 +280,21 @@
 		},
 		{
 			"name": "Get Pre and Post Solana Balance",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
 			"request": {
 				"method": "GET",
 				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"transactionHash\":\"ddytsCKXJ1DCv57JYp7aic2nMMBBjcKDVozUZ8we4i85LWcqTgML1rWFSqpgx5T1z6uGt22ssuajE6CHKXTQaz9\",\n    \"owner\":\"BKHXmDNrVBiGP3mBxyrn5dGkG4ofiqbqJFdPG9AJpCPq\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
 				"url": {
 					"raw": "localhost:3000/solana/getPreAndPostSolanaBalance",
 					"host": [
@@ -292,6 +304,37 @@
 					"path": [
 						"solana",
 						"getPreAndPostSolanaBalance"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Token Account Creation Charges",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"transactionHash\":\"ddytsCKXJ1DCv57JYp7aic2nMMBBjcKDVozUZ8we4i85LWcqTgML1rWFSqpgx5T1z6uGt22ssuajE6CHKXTQaz9\",\n    \"owner\":\"BKHXmDNrVBiGP3mBxyrn5dGkG4ofiqbqJFdPG9AJpCPq\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:3000/solana/findATACreationFee",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"solana",
+						"findATACreationFee"
 					]
 				}
 			},
@@ -413,9 +456,21 @@
 		},
 		{
 			"name": "Get Pre and Post Token Balance",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
 			"request": {
 				"method": "GET",
 				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"transactionHash\":\"ddytsCKXJ1DCv57JYp7aic2nMMBBjcKDVozUZ8we4i85LWcqTgML1rWFSqpgx5T1z6uGt22ssuajE6CHKXTQaz9\",\n    \"owner\":\"BKHXmDNrVBiGP3mBxyrn5dGkG4ofiqbqJFdPG9AJpCPq\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
 				"url": {
 					"raw": "localhost:3000/solana/getPreAndPostTokenBalance",
 					"host": [
@@ -463,9 +518,21 @@
 		},
 		{
 			"name": "Get Input and Output Token Quantity from Transaction Receipt Post Swap",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
 			"request": {
 				"method": "GET",
 				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"transactionHash\":\"ddytsCKXJ1DCv57JYp7aic2nMMBBjcKDVozUZ8we4i85LWcqTgML1rWFSqpgx5T1z6uGt22ssuajE6CHKXTQaz9\",\n    \"owner\":\"BKHXmDNrVBiGP3mBxyrn5dGkG4ofiqbqJFdPG9AJpCPq\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
 				"url": {
 					"raw": "localhost:3000/solana/getInputAndOutputTokenQtyFromTxReceiptPostSwap",
 					"host": [

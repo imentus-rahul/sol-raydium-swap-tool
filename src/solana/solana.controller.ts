@@ -116,6 +116,11 @@ export class SolanaController {
     return this.solanaService.getPreAndPostTokenBalance(body.transactionHash, body.owner);
   }
 
+  @Get('findATACreationFee')
+  async findATACreationFee(@Body() body: { transactionHash: string, owner: string }) {
+    return this.solanaService.findATACreationFee(body.transactionHash, body.owner);
+  }
+
   @Get('getAllTokenAccountsWithRaydiumPrices')  
   async getAllTokenAccountsWithRaydiumPrices(@Body() body: { owner: string }) {
     return this.solanaService.getAllTokenAccountsWithRaydiumPrices(body.owner);

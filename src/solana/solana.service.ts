@@ -3,7 +3,7 @@ import * as dotenv from 'dotenv';
 import axios from 'axios';
 import Decimal from 'decimal.js';
 import fs from 'fs';
-import { clusterApiUrl, Connection, PublicKey, VersionedMessage, Keypair, Transaction, LAMPORTS_PER_SOL, SystemProgram, TransactionInstruction, ComputeBudgetProgram, TransactionExpiredBlockheightExceededError, SendTransactionError } from '@solana/web3.js';
+import { clusterApiUrl, Connection, PublicKey, VersionedMessage, Keypair, Transaction, LAMPORTS_PER_SOL, SystemProgram, TransactionInstruction, ComputeBudgetProgram, TransactionExpiredBlockheightExceededError, SendTransactionError, ParsedInstruction } from '@solana/web3.js';
 import { LIQUIDITY_STATE_LAYOUT_V4, MARKET_STATE_LAYOUT_V3, MAINNET_PROGRAM_ID, LiquidityPoolKeys } from '@raydium-io/raydium-sdk';
 import { createAssociatedTokenAccountIdempotentInstruction, createCloseAccountInstruction, createSyncNativeInstruction, createTransferInstruction, getAssociatedTokenAddressSync, NATIVE_MINT, TOKEN_PROGRAM_ID, TokenAccountNotFoundError } from '@solana/spl-token';
 
@@ -386,14 +386,23 @@ export class SolanaService {
             const accountKeys = parsedTx.transaction.message.accountKeys.map(key => key.pubkey.toString());
             const ownerIndex = accountKeys.indexOf(owner);
 
-            const preBalance = parsedTx.meta?.preBalances[ownerIndex];
-            const postBalance = parsedTx.meta?.postBalances[ownerIndex];
+            const preBalanceInLamports = parsedTx.meta?.preBalances[ownerIndex];
+            const preBalanceInSol = preBalanceInLamports / LAMPORTS_PER_SOL;
+            const postBalanceInLamports = parsedTx.meta?.postBalances[ownerIndex];
+            const postBalanceInSol = postBalanceInLamports / LAMPORTS_PER_SOL;
+
+            const gasFeeInLamports = parsedTx.meta?.fee;
+            const gasFeeInSol = gasFeeInLamports / LAMPORTS_PER_SOL;
 
             return {
-                preBalance: preBalance,
-                postBalance: postBalance,
-                changeInLamports: postBalance - preBalance,
-                changeInSol: (postBalance - preBalance) / 10 ** 9
+                preBalanceInLamports: preBalanceInLamports,
+                preBalanceInSol: preBalanceInSol,
+                postBalanceInLamports: postBalanceInLamports,
+                postBalanceInSol: postBalanceInSol,
+                changeInLamports: postBalanceInLamports - preBalanceInLamports,
+                changeInSol: (postBalanceInLamports - preBalanceInLamports) / 10 ** 9,
+                gasFeeInLamports: gasFeeInLamports,
+                gasFeeInSol: gasFeeInSol
             }
         });
     }
@@ -519,12 +528,20 @@ export class SolanaService {
             // check postBalanceMap for owner, find common owner and mint in preBalanceMap
             postBalanceMap.forEach(balance => {
                 const preBalance = preBalanceMap.find(b => b.mint === balance.mint && b.owner === balance.owner);
-                // console.log("balance.uiAmount: ", balance.uiAmount, "preBalance.uiAmount: ", preBalance.uiAmount)
+                // console.log("balance.uiAmount: ", balance?.uiAmount, "preBalance.uiAmount: ", preBalance?.uiAmount)
                 if (preBalance) {
                     differenceBalanceMap.push({
                         owner: balance.owner,
                         mint: balance.mint,
-                        change: (balance.uiAmount) - (preBalance.uiAmount),
+                        change: (balance?.uiAmount || 0) - (preBalance?.uiAmount || 0),
+                        decimals: balance.decimals
+                    });
+                }
+                else { // if preBalance is not found, then it is a new token account created
+                    differenceBalanceMap.push({
+                        owner: balance.owner,
+                        mint: balance.mint,
+                        change: balance?.uiAmount || 0,
                         decimals: balance.decimals
                     });
                 }
@@ -552,6 +569,37 @@ export class SolanaService {
                 timestamp: parsedTx.blockTime ? parsedTx.blockTime * 1000 : Date.now()
             };
         });
+    }
+
+    async findATACreationFee(transactionHash: string, owner: string): Promise<{ ataCreationFeeInLamports: number, ataCreationFeeInSol: number } | null> {
+        let parsedTx = await this.getParsedTransactionReceipt(transactionHash);
+
+        // Check if the parsed transaction has inner instructions
+        if (!parsedTx.meta || !parsedTx.meta.innerInstructions) {
+            return null; // No inner instructions found
+        }
+        
+        let ataCreationFee = 0;
+        // Iterate through inner instructions to find the "createAccount" instruction
+        for (const instruction of parsedTx.meta.innerInstructions) {
+            for (const innerInstruction of instruction.instructions as any) {
+                if (innerInstruction?.parsed && innerInstruction?.parsed?.type === 'createAccount') {
+                    const info = innerInstruction?.parsed?.info;
+    
+                    // Check if the owner and source match the provided values
+                    if (info.owner === "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" && info.source === owner && info.lamports == 2039280) {
+                        // Return the fee charged (lamports)
+                        ataCreationFee += info.lamports; // This is the amount of lamports charged for creating the account
+                    }
+                }
+            }
+        }
+
+        // No matching createAccount instruction found in case of 0
+        return {
+            ataCreationFeeInLamports: ataCreationFee,
+            ataCreationFeeInSol: ataCreationFee / LAMPORTS_PER_SOL
+        }
     }
 
     // // Raydium
@@ -920,11 +968,10 @@ export class SolanaService {
     // getInputAndOutputTokenQtyFromTxReceiptPostSwap
     async getInputAndOutputTokenQtyFromTxReceiptPostSwap(transactionHash: string, owner: string) {
         return this.retry(async () => {
-            let parsedTx = await this.getParsedTransactionReceipt(transactionHash);
-
             const result1 = await this.getPreAndPostTokenBalance(transactionHash, owner);
             const result1SolBalance = await this.getPreAndPostSolanaBalance(transactionHash, owner);
-
+            
+            const ataCreationFee = await this.findATACreationFee(transactionHash, owner);
 
             const owner2 = "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1" // fix raydium authority
             const result2 = await this.getPreAndPostTokenBalance(transactionHash, owner2);
@@ -933,7 +980,11 @@ export class SolanaService {
             const aggregatedResult = {
                 inputToken: result1.inputToken ? result1.inputToken : result2.outputToken,
                 outputToken: result1.outputToken ? result1.outputToken : result2.inputToken,
-                SolCostToUser: result1SolBalance.changeInSol,
+                solCostToUser: result1SolBalance.changeInSol,
+                gasFeeInLamports: result1SolBalance.gasFeeInLamports,
+                gasFeeInSol: result1SolBalance.gasFeeInSol,
+                ataCreationFeeInLamports: ataCreationFee.ataCreationFeeInLamports,
+                ataCreationFeeInSol: ataCreationFee.ataCreationFeeInSol,
                 timestamp: result1.timestamp ? result1.timestamp : result2.timestamp
             };
             return aggregatedResult;
