@@ -399,8 +399,8 @@ export class SolanaService {
                 preBalanceInSol: preBalanceInSol,
                 postBalanceInLamports: postBalanceInLamports,
                 postBalanceInSol: postBalanceInSol,
-                changeInLamports: postBalanceInLamports - preBalanceInLamports,
-                changeInSol: (postBalanceInLamports - preBalanceInLamports) / 10 ** 9,
+                changeInLamports: Math.abs(postBalanceInLamports - preBalanceInLamports),
+                changeInSol: Math.abs((postBalanceInLamports - preBalanceInLamports) / LAMPORTS_PER_SOL),
                 gasFeeInLamports: gasFeeInLamports,
                 gasFeeInSol: gasFeeInSol
             }
@@ -502,47 +502,51 @@ export class SolanaService {
             const differenceBalanceMap = []; // calculate the difference between pre and post balances in a given transaction
 
             // Process pre-balances
-            preBalances.forEach(balance => {
-                if (balance.owner === owner) {
+            preBalances.forEach(preBalanceElement => {
+                if (preBalanceElement.owner === owner) {
                     preBalanceMap.push({
-                        owner: balance.owner,
-                        mint: balance.mint,
-                        uiAmount: balance.uiTokenAmount?.uiAmount || 0,
-                        decimals: balance.uiTokenAmount?.decimals
+                        owner: preBalanceElement.owner,
+                        mint: preBalanceElement.mint,
+                        uiAmount: preBalanceElement.uiTokenAmount?.uiAmount || 0,
+                        decimals: preBalanceElement.uiTokenAmount?.decimals
                     });
                 }
             });
 
             // Process post-balances
-            postBalances.forEach(balance => {
-                if (balance.owner === owner) {
+            postBalances.forEach(postBalanceElement => {
+                if (postBalanceElement.owner === owner) {
                     postBalanceMap.push({
-                        owner: balance.owner,
-                        mint: balance.mint,
-                        uiAmount: balance.uiTokenAmount?.uiAmount || 0,
-                        decimals: balance.uiTokenAmount?.decimals
+                        owner: postBalanceElement.owner,
+                        mint: postBalanceElement.mint,
+                        uiAmount: postBalanceElement.uiTokenAmount?.uiAmount || 0,
+                        decimals: postBalanceElement.uiTokenAmount?.decimals
                     });
                 }
             });
 
             // check postBalanceMap for owner, find common owner and mint in preBalanceMap
-            postBalanceMap.forEach(balance => {
-                const preBalance = preBalanceMap.find(b => b.mint === balance.mint && b.owner === balance.owner);
+            postBalanceMap.forEach(postBalanceElement => {
+                const preBalanceElement = preBalanceMap.find(b => b.mint === postBalanceElement.mint && b.owner === postBalanceElement.owner);
                 // console.log("balance.uiAmount: ", balance?.uiAmount, "preBalance.uiAmount: ", preBalance?.uiAmount)
-                if (preBalance) {
+                if (preBalanceElement) {
                     differenceBalanceMap.push({
-                        owner: balance.owner,
-                        mint: balance.mint,
-                        change: (balance?.uiAmount || 0) - (preBalance?.uiAmount || 0),
-                        decimals: balance.decimals
+                        owner: postBalanceElement.owner,
+                        mint: postBalanceElement.mint,
+                        change: new Decimal(postBalanceElement?.uiAmount || 0).minus(new Decimal(preBalanceElement?.uiAmount || 0)), // JS difference leads to incorrect results in case of high precision decimals
+                        decimals: postBalanceElement.decimals,
+                        preBalanceUiAmount: preBalanceElement?.uiAmount || 0,
+                        postBalanceUiAmount: postBalanceElement?.uiAmount || 0,
                     });
                 }
                 else { // if preBalance is not found, then it is a new token account created
                     differenceBalanceMap.push({
-                        owner: balance.owner,
-                        mint: balance.mint,
-                        change: balance?.uiAmount || 0,
-                        decimals: balance.decimals
+                        owner: postBalanceElement.owner,
+                        mint: postBalanceElement.mint,
+                        change: postBalanceElement?.uiAmount || 0,
+                        decimals: postBalanceElement.decimals,
+                        preBalanceUiAmount: preBalanceElement?.uiAmount || 0,
+                        postBalanceUiAmount: postBalanceElement?.uiAmount || 0,
                     });
                 }
             });
@@ -554,17 +558,24 @@ export class SolanaService {
             const outputToken = differenceBalanceMap.find(c => c.change > 0);
 
             return {
+                // // cannot get WSOL pre and post token balances as data isn't available in the parsedTx
                 inputToken: inputToken ? {
                     amount: Math.abs(inputToken?.change || 0),
                     mint: inputToken?.mint || '',
                     owner: inputToken?.owner || '',
-                    decimals: inputToken?.decimals
+                    decimals: inputToken?.decimals,
+                    preTokenBalanceUiAmount: inputToken?.preBalanceUiAmount || 0,
+                    postTokenBalanceUiAmount: inputToken?.postBalanceUiAmount || 0,
+                    changeInTokenBalanceUiAmount: inputToken?.change || 0
                 } : null,
                 outputToken: outputToken ? {
                     amount: Math.abs(outputToken?.change || 0),
                     mint: outputToken?.mint || '',
                     owner: outputToken?.owner || '',
-                    decimals: outputToken?.decimals
+                    decimals: outputToken?.decimals,
+                    preTokenBalanceUiAmount: outputToken?.preBalanceUiAmount || 0,
+                    postTokenBalanceUiAmount: outputToken?.postBalanceUiAmount || 0,
+                    changeInTokenBalanceUiAmount: outputToken?.change || 0
                 } : null,
                 timestamp: parsedTx.blockTime ? parsedTx.blockTime * 1000 : Date.now()
             };
@@ -578,14 +589,14 @@ export class SolanaService {
         if (!parsedTx.meta || !parsedTx.meta.innerInstructions) {
             return null; // No inner instructions found
         }
-        
+
         let ataCreationFee = 0;
         // Iterate through inner instructions to find the "createAccount" instruction
         for (const instruction of parsedTx.meta.innerInstructions) {
             for (const innerInstruction of instruction.instructions as any) {
                 if (innerInstruction?.parsed && innerInstruction?.parsed?.type === 'createAccount') {
                     const info = innerInstruction?.parsed?.info;
-    
+
                     // Check if the owner and source match the provided values
                     if (info.owner === "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" && info.source === owner && info.lamports == 2039280) {
                         // Return the fee charged (lamports)
@@ -970,7 +981,7 @@ export class SolanaService {
         return this.retry(async () => {
             const result1 = await this.getPreAndPostTokenBalance(transactionHash, owner);
             const result1SolBalance = await this.getPreAndPostSolanaBalance(transactionHash, owner);
-            
+
             const ataCreationFee = await this.findATACreationFee(transactionHash, owner);
 
             const owner2 = "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1" // fix raydium authority
