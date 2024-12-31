@@ -1,6 +1,6 @@
 {
 	"info": {
-		"_postman_id": "6ff1a4dd-009f-448c-8361-8584591870fa",
+		"_postman_id": "cc9cffab-59fa-4abc-b8fd-c464f456f74e",
 		"name": "Solana API Collection",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "39985731"
@@ -108,7 +108,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "localhost:3000/solana/getParsedTransactionReceipt/ddytsCKXJ1DCv57JYp7aic2nMMBBjcKDVozUZ8we4i85LWcqTgML1rWFSqpgx5T1z6uGt22ssuajE6CHKXTQaz9",
+					"raw": "localhost:3000/solana/getParsedTransactionReceipt/37TWnC7RtiG2mxrcGJqQx1Db26kexjcGSzUFPHZ3YYuj1K2UfXbHzSv2ZbjEMddtiXm1csE9G8E7JJE4aBqxB62a",
 					"host": [
 						"localhost"
 					],
@@ -116,7 +116,7 @@
 					"path": [
 						"solana",
 						"getParsedTransactionReceipt",
-						"ddytsCKXJ1DCv57JYp7aic2nMMBBjcKDVozUZ8we4i85LWcqTgML1rWFSqpgx5T1z6uGt22ssuajE6CHKXTQaz9"
+						"37TWnC7RtiG2mxrcGJqQx1Db26kexjcGSzUFPHZ3YYuj1K2UfXbHzSv2ZbjEMddtiXm1csE9G8E7JJE4aBqxB62a"
 					]
 				}
 			},
@@ -288,7 +288,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"transactionHash\":\"ddytsCKXJ1DCv57JYp7aic2nMMBBjcKDVozUZ8we4i85LWcqTgML1rWFSqpgx5T1z6uGt22ssuajE6CHKXTQaz9\",\n    \"owner\":\"BKHXmDNrVBiGP3mBxyrn5dGkG4ofiqbqJFdPG9AJpCPq\"\n}",
+					"raw": "{\n    \"transactionHash\":\"42waoacyVyKtoN2AUs8E5aYpgYokHzNshbeUzEuQBMxFcoFEununwf6FiBJYqeuSfw7o5n7HhYaB1cMXKnUCUmpf\",\n    \"owner\":\"BKHXmDNrVBiGP3mBxyrn5dGkG4ofiqbqJFdPG9AJpCPq\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -464,7 +464,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"transactionHash\":\"ddytsCKXJ1DCv57JYp7aic2nMMBBjcKDVozUZ8we4i85LWcqTgML1rWFSqpgx5T1z6uGt22ssuajE6CHKXTQaz9\",\n    \"owner\":\"BKHXmDNrVBiGP3mBxyrn5dGkG4ofiqbqJFdPG9AJpCPq\"\n}",
+					"raw": "{\n    \"transactionHash\":\"37TWnC7RtiG2mxrcGJqQx1Db26kexjcGSzUFPHZ3YYuj1K2UfXbHzSv2ZbjEMddtiXm1csE9G8E7JJE4aBqxB62a\",\n    \"owner\":\"BKHXmDNrVBiGP3mBxyrn5dGkG4ofiqbqJFdPG9AJpCPq\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -526,7 +526,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"transactionHash\":\"ddytsCKXJ1DCv57JYp7aic2nMMBBjcKDVozUZ8we4i85LWcqTgML1rWFSqpgx5T1z6uGt22ssuajE6CHKXTQaz9\",\n    \"owner\":\"BKHXmDNrVBiGP3mBxyrn5dGkG4ofiqbqJFdPG9AJpCPq\"\n}",
+					"raw": "{\n    \"transactionHash\":\"42waoacyVyKtoN2AUs8E5aYpgYokHzNshbeUzEuQBMxFcoFEununwf6FiBJYqeuSfw7o5n7HhYaB1cMXKnUCUmpf\",\n    \"owner\":\"BKHXmDNrVBiGP3mBxyrn5dGkG4ofiqbqJFdPG9AJpCPq\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -693,6 +693,38 @@
 					"path": [
 						"solana",
 						"convertToWrapSol"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Calculate Trading Thresholds",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"buyFee\": 0.00085,\n    \"sellFee\": 0.00085,\n    \"ataCreationFee\": 0.00203928,\n    \"tokenPrice\": 100,\n    \"quantity\": 10,\n    \"targetPricePercent\": 20.00,\n    \"stoplossPricePercent\": 20.00,\n    \"defensePricePercent\": 10.00\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:3000/trading-math/calculate-trading-thresholds",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"trading-math",
+						"calculate-trading-thresholds"
 					]
 				}
 			},
