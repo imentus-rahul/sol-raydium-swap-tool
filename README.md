@@ -58,6 +58,35 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Debugging
+
+To debug the NestJS application, you can use the following steps:
+
+1. Open the `.vscode/launch.json` file and add the following configuration:
+
+```json
+{
+    "configurations": [
+        {
+            "name": "Debug NestJS App",
+            "port": 9229,
+            "request": "attach",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "type": "node"
+        }
+    ]
+}
+```
+
+2. Run the application in debug mode:
+
+```bash
+$ npm run start:debug
+```
+3. Add red dot to the left of the line number you want to debug.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
