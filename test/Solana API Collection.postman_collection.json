@@ -568,6 +568,28 @@
 			"response": []
 		},
 		{
+			"name": "Get Raydium LP Stats",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/solana/getRaydiumLPStats",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"solana",
+						"getRaydiumLPStats"
+					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\"ammId\": \"YourAMMIdHere\"}"
+				}
+			}
+		},
+		{
 			"name": "Get Pool Info for Tokens",
 			"request": {
 				"method": "GET",
@@ -627,7 +649,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"fromToken\": \"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\",\n    \"toToken\": \"So11111111111111111111111111111111111111112\",\n    \"ammId\": \"3gSjs6MqyHFsp8DXvaKvVUJjV7qg5itf9qmUGuhnSaWH\",\n    \"amount\": 0.001,\n    \"slippageX\": 5,\n    \"maxLamports\": 100000,\n    \"useVersionedTransaction\": true,\n    \"fixedSide\": \"in\"\n}",
+					"raw": "{\n    \"fromToken\": \"DD8GJwAZHZZsLEtKnxdWfm8JbBhUj1oVwiGigfPUpump\",\n    \"toToken\": \"So11111111111111111111111111111111111111112\",\n    \"ammId\": \"H6TGEv6XpL1xy1Vp9syD9WZLv3wDL45sQUy7vqV3UgAW\",\n    \"amount\": 14046.99,\n    \"slippageX\": 5,\n    \"maxLamports\": 100000,\n    \"useVersionedTransaction\": true,\n    \"fixedSide\": \"in\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -729,6 +751,28 @@
 				}
 			},
 			"response": []
+		},
+		{
+			"name": "Get Swap Token Price",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/solana/getSwapTokenPrice",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"solana",
+						"getSwapTokenPrice"
+					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\"fromToken\": \"TokenAAddress\", \"toToken\": \"TokenBAddress\", \"ammId\": \"YourAMMIdHere\", \"amount\": 1, \"slippageX\": 0.5, \"fixedSide\": \"in\"}"
+				}
+			}
 		}
 	]
 }

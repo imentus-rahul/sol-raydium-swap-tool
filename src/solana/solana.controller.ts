@@ -4,7 +4,7 @@ import { RaydiumSwapService } from 'src/raydium-swap/raydium-swap.service';
 
 @Controller('solana')
 export class SolanaController {
-  constructor(private readonly solanaService: SolanaService, private readonly raydiumSwapService: RaydiumSwapService) {}
+  constructor(private readonly solanaService: SolanaService, private readonly raydiumSwapService: RaydiumSwapService) { }
 
   @Get('getRawAccountInfo/:publicKey')
   async getRawAccountInfo(@Param('publicKey') publicKey: string) {
@@ -121,7 +121,7 @@ export class SolanaController {
     return this.solanaService.findATACreationFee(body.transactionHash, body.owner);
   }
 
-  @Get('getAllTokenAccountsWithRaydiumPrices')  
+  @Get('getAllTokenAccountsWithRaydiumPrices')
   async getAllTokenAccountsWithRaydiumPrices(@Body() body: { owner: string }) {
     return this.solanaService.getAllTokenAccountsWithRaydiumPrices(body.owner);
   }
@@ -141,8 +141,20 @@ export class SolanaController {
     return this.raydiumSwapService.findPoolInfoForTokens(body.ammId, body.mintA, body.mintB);
   }
 
+  // get token price: 1 SOL = ? tokens AND 1 token = ? SOL
+  @Get('getRaydiumLPStats')
+  async getRaydiumLPStats(@Body() body: { ammId: string }) {
+    return this.solanaService.getRaydiumLPStats(body.ammId);
+  }
+
+  // getCalcAmountOut
+  @Get('getSwapTokenPrice')
+  async getSwapTokenPrice(@Body() body: { fromToken: string, toToken: string, ammId: string, amount: number, slippageX: number, fixedSide: 'in' | 'out' }) {
+    return this.raydiumSwapService.getSwapTokenPrice(body.fromToken, body.toToken, body.ammId, body.amount, body.slippageX, body.fixedSide);
+  }
+
   @Get('getSignedSwapTransaction')
-  async getSignedSwapTransaction(@Body() body: { fromToken: string, toToken: string, ammId: string, amount: number, slippageX: number, maxLamports: number, useVersionedTransaction: boolean, fixedSide: 'in' | 'out'}) {
+  async getSignedSwapTransaction(@Body() body: { fromToken: string, toToken: string, ammId: string, amount: number, slippageX: number, maxLamports: number, useVersionedTransaction: boolean, fixedSide: 'in' | 'out' }) {
     return this.raydiumSwapService.getSwapTransaction(body.fromToken, body.toToken, body.ammId, body.amount, body.slippageX, body.maxLamports, body.useVersionedTransaction, body.fixedSide);
   }
 

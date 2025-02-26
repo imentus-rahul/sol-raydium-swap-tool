@@ -23,6 +23,7 @@ import axios from 'axios';
  */
 import { Injectable } from '@nestjs/common';
 import { SolanaService } from 'src/solana/solana.service';
+import Decimal from 'decimal.js';
 
 @Injectable()
 export class RaydiumSwapService {
@@ -214,6 +215,45 @@ export class RaydiumSwapService {
         legacyTransaction.add(...instructions)
 
         return legacyTransaction
+    }
+
+    // // get swap token price
+    async getSwapTokenPrice(fromToken: string, toToken: string, ammId: string, amount: number, slippageX: number, fixedSide: 'in' | 'out' = 'in'): Promise<any> {
+        console.log("Getting swap token price, fromToken: ", fromToken, " toToken: ", toToken, " ammId: ", ammId, " amount: ", amount, " slippageX: ", slippageX, " fixedSide: ", fixedSide)
+        const connection = await this.solanaService.getConnectionWithFallback()
+        const wallet = await this.solanaService.getBackendKeypair()
+        const poolKeys = await this.findPoolInfoForTokens(ammId, fromToken, toToken)
+        if (!poolKeys) {
+            console.error('Pool info not found for swap from: ', fromToken, ' to: ', toToken, 'amount: ', amount, 'slippageX: ', slippageX);
+            throw new Error(`Pool info not found for swap from: ${fromToken} to: ${toToken} amount: ${amount} slippageX: ${slippageX}`);
+        } else {
+            console.log('Found pool info');
+        }
+        const directionIn = poolKeys.quoteMint.toString() == toToken
+
+        // with max slippage
+        let { minAmountOut, amountIn } = await this.calcAmountOut(poolKeys, amount, directionIn, slippageX)
+        console.log("Calculated Swap minAmountOut: ", minAmountOut.toExact(), " toToken: ", toToken)
+        console.log("Calculated Swap amountIn: ", amountIn.toExact(), " fromToken: ", fromToken)
+        let worstCaseAmountOut = minAmountOut.toExact();
+
+        // with zero slippage
+        ({ minAmountOut, amountIn } = await this.calcAmountOut(poolKeys, amount, directionIn, 0))
+        console.log("Calculated Swap minAmountOut with zero slippage: ", minAmountOut.toExact(), " toToken: ", toToken)
+        console.log("Calculated Swap amountIn with zero slippage: ", amountIn.toExact(), " fromToken: ", fromToken)
+        let bestCaseAmountOut = minAmountOut.toExact();
+
+        // get 100 precision price of token
+        let worstCaseTokenPrice = new Decimal(amountIn.toExact()).div(new Decimal(worstCaseAmountOut)).toFixed(100)
+        let bestCaseTokenPrice = new Decimal(amountIn.toExact()).div(new Decimal(bestCaseAmountOut)).toFixed(100)
+
+        return {
+            worstCaseAmountOut,
+            bestCaseAmountOut,
+
+            worstCaseTokenPrice,
+            bestCaseTokenPrice,
+        }
     }
 
     // // returns tx hash if successful, null if not
