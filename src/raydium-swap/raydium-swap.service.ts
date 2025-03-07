@@ -243,9 +243,16 @@ export class RaydiumSwapService {
         console.log("Calculated Swap amountIn with zero slippage: ", amountIn.toExact(), " fromToken: ", fromToken)
         let bestCaseAmountOut = minAmountOut.toExact();
 
-        // get 100 precision price of token
-        let worstCaseTokenPrice = new Decimal(amountIn.toExact()).div(new Decimal(worstCaseAmountOut)).toFixed(100)
-        let bestCaseTokenPrice = new Decimal(amountIn.toExact()).div(new Decimal(bestCaseAmountOut)).toFixed(100)
+        // get 35 precision price of token
+        let worstCaseTokenPrice;
+        let bestCaseTokenPrice;
+        if (fromToken == NATIVE_MINT.toString()) {
+            worstCaseTokenPrice = new Decimal(amountIn.toExact()).div(new Decimal(worstCaseAmountOut)).toFixed(35);
+            bestCaseTokenPrice = new Decimal(amountIn.toExact()).div(new Decimal(bestCaseAmountOut)).toFixed(35)
+        } else {
+            worstCaseTokenPrice = new Decimal(worstCaseAmountOut).div(new Decimal(amountIn.toExact())).toFixed(35);
+            bestCaseTokenPrice = new Decimal(bestCaseAmountOut).div(new Decimal(amountIn.toExact())).toFixed(35)
+        }
 
         return {
             worstCaseAmountOut,
